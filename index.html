@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Угадай Пермь</title>
+<style>
+:root{--amber:#ffb23e;--teal:#27c3d6;--red:#ff5a4f;--text:#eef3f7;--mute:rgba(238,243,247,.62)}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#070b12;color:var(--text);font:15px/1.4 "Segoe UI",system-ui,-apple-system,sans-serif;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer;border:0}
+button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+.glass{background:linear-gradient(135deg,rgba(255,255,255,.15),rgba(255,255,255,.04));-webkit-backdrop-filter:blur(22px) saturate(1.8);backdrop-filter:blur(22px) saturate(1.8);border:1px solid rgba(255,255,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.38),inset 0 -1px 0 rgba(255,255,255,.05),0 12px 40px rgba(0,0,0,.45);border-radius:20px}
+/* фон */
+#bg{position:fixed;inset:0;overflow:hidden;background:radial-gradient(600px circle at var(--mx,50%) var(--my,40%),rgba(39,195,214,.16),transparent 60%),#070b12}
+#bg i{position:absolute;width:46vmax;height:46vmax;border-radius:50%;filter:blur(90px);opacity:.5;animation:drift 22s ease-in-out infinite alternate}
+#bg i:nth-child(1){background:#1c8fa6;left:-10vmax;top:-12vmax}
+#bg i:nth-child(2){background:#5b3fe0;right:-14vmax;top:10vmax;animation-duration:28s}
+#bg i:nth-child(3){background:#d9822b;left:25vw;bottom:-26vmax;animation-duration:34s;opacity:.35}
+@keyframes drift{to{transform:translate(8vmax,6vmax) scale(1.15)}}
+.scr{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:20px;overflow:auto;z-index:50}
+.scr.show{display:flex}
+/* лобби */
+#lobby .wrap{width:min(860px,100%);padding:34px}
+h1{margin:0;font-size:clamp(30px,5vw,48px);letter-spacing:-.02em;font-weight:700}
+.sub{color:var(--mute);margin:6px 0 24px}
+.modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.mode{text-align:left;padding:18px;border-radius:18px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);transition:transform .15s,background .15s,border-color .15s}
+.mode:hover{transform:translateY(-2px);background:rgba(255,255,255,.1)}
+.mode.on{border-color:var(--amber);background:rgba(255,178,62,.14);box-shadow:0 0 0 1px var(--amber) inset}
+.mode b{display:block;font-size:17px;margin:6px 0 2px}
+.mode span{color:var(--mute);font-size:13px}
+.mode em{display:block;margin-top:8px;font-style:normal;font-size:12px;color:var(--amber)}
+.mode .ic{font-size:26px}
+#timeRow{display:none;margin:18px 0 0;align-items:center;gap:10px;flex-wrap:wrap}
+#timeRow.show{display:flex}
+.chip{padding:8px 16px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14)}
+.chip.on{background:var(--amber);color:#1b1304;font-weight:600;border-color:var(--amber)}
+.cta{margin-top:26px;width:100%;padding:15px;border-radius:16px;background:linear-gradient(180deg,#ffc467,#ff9f2e);color:#1b1304;font-weight:700;font-size:17px;box-shadow:0 8px 28px rgba(255,160,40,.35)}
+.cta:disabled{opacity:.45;cursor:wait}
+.warn{display:none;margin-top:16px;padding:10px 14px;border-radius:12px;background:rgba(255,90,79,.16);border:1px solid var(--red)}
+/* игра */
+#game{position:fixed;inset:0;display:none;background:#000;z-index:10}
+#game.show{display:block}
+#pano,#shield,#cover{position:absolute;inset:0}
+#shield{z-index:3;touch-action:none;cursor:grab}
+#shield.free{display:none}
+#shield.lock{cursor:not-allowed}
+#cover{z-index:4;display:none;align-items:center;justify-content:center;background:#080c14;overflow:hidden}
+#cover.show{display:flex}
+#cover:before{content:"";position:absolute;width:160vmax;height:160vmax;background:conic-gradient(from 0deg,#1c8fa6,#5b3fe0,#d9822b,#1c8fa6);filter:blur(80px);opacity:.55;animation:spin 14s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#cover .glass{position:relative;padding:28px 38px;text-align:center}
+#cover b{font-size:26px;display:block}
+#leave,#compass,#hud,#tools,#hints{position:absolute;z-index:8}
+#leave{top:16px;left:16px;padding:10px 18px;font-weight:600;border-radius:16px}
+#compass{top:12px;left:50%;transform:translateX(-50%);width:min(300px,50vw);height:46px;border-radius:14px}
+#hud{top:14px;right:16px;display:flex;gap:16px;align-items:center;padding:10px 18px;font-variant-numeric:tabular-nums}
+#hud b{font-size:20px}
+#hud .t{background:rgba(0,0,0,.45);padding:5px 14px;border-radius:12px}
+#hud .t.low{color:var(--red)}
+#tools{left:16px;bottom:64px;display:flex;flex-direction:column;gap:10px}
+#tools button{width:46px;height:46px;border-radius:50%;font-size:20px}
+#hints{left:16px;bottom:14px;display:flex;gap:8px;font-size:12px;color:var(--mute)}
+#hints span{padding:7px 12px;border-radius:12px}
+#mini{position:absolute;z-index:8;right:16px;bottom:16px;width:260px;height:150px;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;opacity:.88;transition:width .28s,height .28s,opacity .2s}
+#mini:hover,#mini.open{width:min(720px,92vw);height:min(500px,64vh);opacity:1}
+#minimap{flex:1;min-height:0;background:#0f1722}
+#minimap [class*="ground-pane"],#resmap [class*="ground-pane"]{filter:invert(.92) hue-rotate(180deg) saturate(.7) brightness(.9)}
+#ans{padding:12px;font-weight:700;letter-spacing:.04em;background:linear-gradient(180deg,#ffc467,#ff9f2e);color:#1b1304}
+#ans:disabled{background:rgba(255,255,255,.1);color:var(--mute);cursor:not-allowed}
+#loader{position:absolute;inset:0;z-index:9;display:none;align-items:center;justify-content:center;background:#070b12}
+#loader.show{display:flex}
+#loader .glass{padding:26px 34px;text-align:center;max-width:460px}
+.spin{width:34px;height:34px;margin:0 auto 12px;border:3px solid rgba(255,255,255,.2);border-top-color:var(--amber);border-radius:50%;animation:spin 1s linear infinite}
+/* итоги */
+#result{position:absolute;inset:0;z-index:20;display:none;background:#0f1722}
+#result.show{display:block}
+#resmap{position:absolute;inset:0}
+.side{position:absolute;z-index:3;top:16px;left:16px;bottom:16px;width:min(320px,calc(100% - 32px));padding:20px;display:flex;flex-direction:column;gap:12px;overflow:auto}
+.side h2{margin:0 0 2px;font-size:21px}
+.stat{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-radius:14px;background:rgba(255,255,255,.07);font-variant-numeric:tabular-nums}
+.stat small{color:var(--mute)}.stat b{font-size:18px}
+.bar{height:8px;border-radius:8px;background:rgba(255,255,255,.1);overflow:hidden;flex:none}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--amber));transition:width .9s}
+#rSide .cta{margin-top:auto}
+.grade{display:flex;gap:14px;align-items:center;padding:14px 16px;border-radius:16px;border:1px solid var(--amber);background:rgba(255,178,62,.1)}
+.grade strong{font-size:46px;line-height:1;color:var(--amber)}
+.grade span{font-weight:600}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid2 .stat{display:block;padding:10px 14px}
+.rows{display:grid;gap:6px}
+.rows div{display:flex;justify-content:space-between;gap:10px;padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.07);font-size:14px;font-variant-numeric:tabular-nums}
+.pair{display:flex;gap:8px;margin-top:auto}.pair .cta{margin:0;padding:12px}
+.cta.alt{background:rgba(255,255,255,.1);color:var(--text);box-shadow:none;margin-top:0}
+#miniTg{display:none;position:absolute;top:8px;right:8px;z-index:3;width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.55)}
+@media(hover:none){#miniTg{display:block}}
+@media(max-width:700px){
+#compass{top:66px;width:min(300px,72vw)}#hud{top:10px;right:10px;gap:10px;font-size:13px;padding:8px 12px}#hud b{font-size:15px}
+#leave{top:10px;left:10px;padding:8px 12px}#tools{bottom:200px}
+.side{top:auto;left:8px;right:8px;bottom:8px;width:auto;max-height:52%}}
+@media(prefers-reduced-motion:reduce){#bg i,#cover:before,.spin{animation:none}#mini{transition:none}}
+@media(max-width:640px){#hints{display:none}#hud{gap:8px;padding:8px 12px}}
+</style>
+</head>
+<body>
+<div id="bg"><i></i><i></i><i></i></div>
+
+<!-- ЛОББИ -->
+<div id="lobby" class="scr show">
+  <div class="glass wrap">
+    <h1>Угадай Пермь</h1>
+    <p class="sub">Каждый раунд — случайное место в городе. 5 раундов, до 5000 очков за каждый.</p>
+    <div class="modes" id="modes"></div>
+    <div id="timeRow"><span class="sub" style="margin:0">Время на раунд:</span></div>
+    <div class="warn" id="fileWarn">Страница открыта с диска (file://). Яндекс не отдаёт панорамы таким страницам — выложите файл на GitHub Pages или откройте через localhost.</div>
+    <button class="cta" id="startBtn" disabled>Загрузка карт…</button>
+  </div>
+</div>
+
+<!-- ИГРА -->
+<div id="game">
+  <div id="pano"></div>
+  <div id="shield"></div>
+  <div id="cover"><div class="glass"><b>Кадр исчез</b><span style="color:var(--mute)">Где вы только что были? Отметьте точку и ответьте.</span></div></div>
+  <button id="leave" class="glass">Покинуть</button>
+  <canvas id="compass" class="glass" width="600" height="92"></canvas>
+  <div id="hud" class="glass"><span><b id="rnd">1</b><span style="color:var(--mute)">/5</span></span><span class="t" id="tbox"><b id="timer">∞</b></span><span>🏆 <b id="score">0</b></span><span title="Общее время">⏱ <b id="clock">0:00</b></span></div>
+  <div id="tools"><button class="glass" id="homeBtn" title="Вернуться к началу">🏁</button></div>
+  <div id="hints"></div>
+  <div id="mini" class="glass"><button id="miniTg" aria-label="Развернуть карту">⤢</button><div id="minimap"></div><button id="ans" disabled>ОТВЕТИТЬ</button></div>
+  <div id="loader"><div class="glass"><div class="spin"></div><div id="loadmsg">Ищем место в Перми…</div></div></div>
+  <div id="result"><div id="resmap"></div>
+    <div id="rSide" class="side glass">
+      <h2 id="rTitle">Раунд завершён!</h2>
+      <div class="stat"><small>Очки</small><span><b id="rPts">0</b> <small>/ 5000</small></span></div>
+      <div class="stat"><span>📍 <b id="rDist">—</b></span><small>от цели</small></div>
+      <div class="stat"><span>⏱ <b id="rTime">—</b></span><small>время раунда</small></div>
+      <div class="bar"><i id="rBar"></i></div>
+      <div class="stat"><small>Общий счёт</small><b id="rTotal" style="color:var(--amber)">0</b></div>
+      <button class="cta" id="nextBtn">Дальше</button>
+    </div>
+    <div id="fSide" class="side glass" style="display:none">
+      <h2>Игра завершена!</h2>
+      <div class="grade"><strong id="fGrade">0</strong><span id="fRank"></span></div>
+      <div class="grid2">
+        <div class="stat"><small>Очки</small><br><b id="fTotal"></b></div><div class="stat"><small>Точность</small><br><b id="fAcc"></b></div>
+        <div class="stat"><small>Время</small><br><b id="fTime"></b></div><div class="stat"><small>Режим</small><br><b id="fMode" style="font-size:14px"></b></div>
+      </div>
+      <small style="color:var(--mute)">Результаты по раундам</small>
+      <div class="rows" id="fRows"></div>
+      <button class="cta alt" id="shareBtn">Скопировать результат</button>
+      <div class="pair"><button class="cta" id="againBtn">Сыграть ещё</button><button class="cta alt" id="menuBtn">В меню</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== Настройки ===== */
+const API_KEY = 'f393bc0f-d2e5-41e7-89e2-1de38c141a01';
+const ROUNDS = 5, MAX_POINTS = 5000, SCORE_SCALE_M = 2500;
+const CENTER = [58.0105, 56.2330];
+const SEEDS = [[58.0102,56.2293],[58.0107,56.2447],[58.0113,56.2527],[58.0176,56.2455],[58.0143,56.2325],[58.0097,56.2350]]; // запас на случай сбоя поиска
+const MODES = {
+  free:  {n:'Без ограничений', ic:'🧭', d:'Ходи по городу: стрелки, поворот, зум. Можно с таймером.', move:true,  rot:true},
+  spin:  {n:'Только вращение', ic:'🔄', d:'Стоишь на месте, но можно крутить и приближать.',        move:false, rot:true},
+  frame: {n:'Один кадр',       ic:'🖼',  d:'Только картинка, какой её выдали. Ни повернуть, ни приблизить.', move:false, rot:false},
+  blitz: {n:'5 секунд',        ic:'⚡', d:'Кадр виден 5 секунд, потом панорама скрывается.',          move:false, rot:false, peek:5}
+};
+
+/* ===== Утилиты ===== */
+const $ = id => document.getElementById(id);
+const cur = {mode:'free', time:60};
+let gid = 0, clockId, roundStart = 0, sumMs = 0, queue, round, total, results, player, startPano, mini, resMap, guessMark, guess, truePos, timerId, left, locked, jobs, used = [], ready = false;
+const store = {
+  get(k, d){ try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch(e){ return d; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+};
+const dist = (a, b) => ymaps.coordSystem.geo.getDistance(a, b);
+const fmtDist = d => d == null ? 'нет ответа' : d < 1000 ? Math.round(d) + ' м' : (d / 1000).toFixed(2).replace('.', ',') + ' км';
+const fmtTime = s => s == null ? '∞' : String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+const fmtClock = ms => { const t = Math.round(ms / 1000); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+const fmtSec = ms => ms < 59500 ? Math.round(ms / 1000) + ' с' : fmtClock(ms);
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const recKey = () => cur.mode + (cur.mode === 'free' ? cur.time : '');
+
+if (location.protocol === 'file:') $('fileWarn').style.display = 'block';
+document.addEventListener('pointermove', e => { const b = $('bg').style; b.setProperty('--mx', e.clientX + 'px'); b.setProperty('--my', e.clientY + 'px'); });
+
+/* ===== Лобби ===== */
+function renderLobby(){
+  const rec = store.get('pg_rec', {});
+  $('modes').innerHTML = Object.entries(MODES).map(([k, m]) =>
+    `<button class="mode ${cur.mode === k ? 'on' : ''}" data-k="${k}"><span class="ic">${m.ic}</span><b>${m.n}</b><span>${m.d}</span>${rec[k + (k === 'free' ? cur.time : '')] ? `<em>Рекорд: ${rec[k + (k === 'free' ? cur.time : '')]}</em>` : ''}</button>`).join('');
+  $('timeRow').classList.toggle('show', cur.mode === 'free');
+  $('timeRow').querySelectorAll('.chip').forEach(c => c.remove());
+  [30, 60, 90, 0].forEach(t => {
+    const c = document.createElement('button');
+    c.className = 'chip' + (cur.time === t ? ' on' : '');
+    c.textContent = t ? t + ' с' : 'Без времени';
+    c.onclick = () => { cur.time = t; renderLobby(); };
+    $('timeRow').appendChild(c);
+  });
+  $('modes').querySelectorAll('.mode').forEach(b => b.onclick = () => { cur.mode = b.dataset.k; renderLobby(); });
+}
+renderLobby();
+
+const s = document.createElement('script');
+s.src = `https://api-maps.yandex.ru/2.1/?apikey=${API_KEY}&lang=ru_RU`;
+s.onload = () => ymaps.ready(() => {
+  mini = new ymaps.Map('minimap', {center:CENTER, zoom:11, controls:[]}, {suppressMapOpenBlock:true});
+  mini.events.add('click', e => {
+    if (locked) return;
+    guess = e.get('coords');
+    if (guessMark) mini.geoObjects.remove(guessMark);
+    guessMark = new ymaps.Placemark(guess, {}, {preset:'islands#redCircleDotIcon'});
+    mini.geoObjects.add(guessMark);
+    $('ans').disabled = false;
+  });
+  new ResizeObserver(() => mini.container.fitToViewport()).observe($('minimap'));
+  ready = true; $('startBtn').disabled = false; $('startBtn').textContent = 'Играть';
+});
+s.onerror = () => { $('startBtn').textContent = 'Не удалось загрузить API Яндекса'; };
+document.head.appendChild(s);
+
+/* ===== Точки: колода из points.json (собирается collector.html из OpenStreetMap) ===== */
+let POINTS = null;
+async function loadPoints(){
+  if (POINTS) return POINTS;
+  try { const r = await fetch('points.json', {cache:'no-cache'}); POINTS = (await r.json()).filter(p => p.length === 2); }
+  catch(e){ POINTS = []; }
+  return POINTS;
+}
+function drawCard(pts){   // колода: пока не пройдены все точки, повторов нет
+  let deck = store.get('pg_deck', null);
+  if (!deck || deck.n !== pts.length || !deck.order.length) deck = {n:pts.length, order:shuffle(pts.map((_, i) => i))};
+  const i = deck.order.pop(); store.set('pg_deck', deck);
+  return pts[i];
+}
+const locate = c => ymaps.panorama.locate(c, {layer:'yandex#panorama'}).then(a => a[0] || null, () => null);
+async function findPoint(){
+  const pts = await loadPoints();
+  for (let t = 0; t < 12 && pts.length; t++){
+    const c = drawCard(pts), p = await locate(c);
+    if (!p || dist(p.getPosition(), c) > 60) continue;
+    const pos = p.getPosition().slice(0, 2);
+    if (used.some(u => dist(u, pos) < 500)) continue;
+    used.push(pos); return {p, pos};
+  }
+  for (const sd of shuffle([...SEEDS])){   // запасной вариант, если points.json нет
+    const p = await locate(sd);
+    if (p && !used.some(u => dist(u, p.getPosition()) < 300)){ const pos = p.getPosition().slice(0, 2); used.push(pos); return {p, pos}; }
+  }
+  throw new Error('панорамы не найдены');
+}
+const job = i => (jobs[i] = jobs[i] || findPoint());
+
+/* ===== Игра ===== */
+function newGame(){
+  gid++; round = 0; total = 0; results = []; jobs = []; used = []; sumMs = 0; roundStart = 0;
+  $('score').textContent = 0; $('clock').textContent = '0:00';
+  $('lobby').classList.remove('show'); $('result').classList.remove('show');
+  $('game').classList.add('show'); if (mini) mini.container.fitToViewport();
+  const m = MODES[cur.mode];
+  $('shield').className = m.move ? 'free' : m.rot ? '' : 'lock';
+  $('tools').style.display = m.move ? 'flex' : 'none';
+  $('tbox').style.display = (m.peek || (cur.mode === 'free' && cur.time)) ? '' : 'none';
+  $('hints').innerHTML = (m.rot ? '<span class="glass">🖱 Перетаскивай для обзора</span><span class="glass">🔍 Колесико для приближения</span>' : '') + (m.move ? '<span class="glass">⬆ Стрелки на земле — шаг вперёд</span>' : '') + (cur.mode === 'frame' ? '<span class="glass">Только один кадр</span>' : '') + (cur.mode === 'blitz' ? '<span class="glass">Запоминай: кадр скоро исчезнет</span>' : '');
+  clearInterval(clockId);
+  clockId = setInterval(() => { $('clock').textContent = fmtClock(sumMs + (roundStart ? Date.now() - roundStart : 0)); }, 500);
+  job(0); nextRound();
+}
+
+async function nextRound(){
+  if (round >= ROUNDS) return finish();
+  const my = gid; round++; locked = true; guess = null; roundStart = 0;
+  clearInterval(timerId);
+  if (guessMark){ mini.geoObjects.remove(guessMark); guessMark = null; }
+  mini.setCenter(CENTER, 11);
+  $('mini').classList.remove('open'); $('cover').classList.remove('show'); $('result').classList.remove('show');
+  $('rnd').textContent = round; $('ans').disabled = true;
+  $('timer').textContent = '∞'; $('timer').classList.remove('low');
+  $('loader').classList.add('show'); $('loadmsg').textContent = 'Ищем место в Перми…';
+  let pt;
+  try { pt = await job(round - 1); }
+  catch(e){ if (my === gid) $('loadmsg').innerHTML = 'Не удалось найти панораму.<br>Проверьте ключ, Referer в кабинете Яндекса и наличие points.json.<br><button class="cta" onclick="quit()">В меню</button>'; return; }
+  if (my !== gid) return;
+  if (round < ROUNDS) job(round);  // следующий раунд ищем заранее
+  const m = MODES[cur.mode], p = pt.p;
+  if (!m.move){ p.getConnectionArrows = () => []; p.getConnectionMarkers = () => []; }
+  if (player) player.destroy();
+  startPano = p; truePos = pt.pos;
+  player = new ymaps.panorama.Player('pano', p, {
+    controls:[], suppressMapOpenBlock:true, hotkeysEnabled:m.move, autoFitToViewport:'always',
+    direction:[Math.random() * 360, 0], span:[90, 60]
+  });
+  player.events.add('directionchange', drawCompass); drawCompass();
+  let started = false;
+  const go = () => {   // таймеры стартуют, когда кадр реально появился
+    if (started || my !== gid) return; started = true;
+    $('loader').classList.remove('show'); locked = false; roundStart = Date.now();
+    if (m.peek) runTimer(m.peek, hidePano);
+    else if (cur.mode === 'free' && cur.time) runTimer(cur.time, submit);
+  };
+  player.events.add('panoramachange', go); setTimeout(go, 1200);
+}
+
+function runTimer(sec, done){
+  left = sec; $('timer').textContent = fmtTime(left);
+  timerId = setInterval(() => {
+    left--; $('timer').textContent = fmtTime(Math.max(left, 0));
+    $('timer').classList.toggle('low', left <= 10 && cur.mode === 'free');
+    if (left <= 0){ clearInterval(timerId); done(); }
+  }, 1000);
+}
+
+function hidePano(){
+  $('cover').classList.add('show'); $('timer').textContent = '—';
+  if (player){ player.destroy(); player = null; }
+  $('mini').classList.add('open');
+}
+
+function submit(){
+  if (locked) return;
+  locked = true; clearInterval(timerId);
+  const ms = roundStart ? Date.now() - roundStart : 0; sumMs += ms; roundStart = 0;
+  let d = null, pts = 0;
+  if (guess){ d = dist(guess, truePos); pts = d < 30 ? MAX_POINTS : Math.round(MAX_POINTS * Math.exp(-d / SCORE_SCALE_M)); }
+  total += pts;
+  const r = {d, pts, ms, t:truePos, g:guess}; results.push(r);
+  $('score').textContent = total;
+  showResult(r);
+}
+
+function ensureResMap(){
+  if (!resMap){
+    resMap = new ymaps.Map('resmap', {center:CENTER, zoom:12, controls:[]}, {suppressMapOpenBlock:true});
+    resMap.controls.add('zoomControl', {position:{right:12, top:80}});
+    new ResizeObserver(() => resMap.container.fitToViewport()).observe($('resmap'));
+  }
+  resMap.container.fitToViewport();
+}
+
+function drawPairs(list){   // зелёные точки — где были, красные — ответы
+  resMap.geoObjects.removeAll(); const all = [];
+  list.forEach((r, i) => {
+    const n = list.length > 1 ? String(i + 1) : '';
+    resMap.geoObjects.add(new ymaps.Placemark(r.t, {iconContent:n, hintContent:`Раунд ${i + 1}: здесь`}, {preset:'islands#greenCircleIcon'})); all.push(r.t);
+    if (r.g){
+      resMap.geoObjects.add(new ymaps.Placemark(r.g, {iconContent:n, hintContent:`Раунд ${i + 1}: ваш ответ`}, {preset:'islands#redCircleIcon'}));
+      resMap.geoObjects.add(new ymaps.Polyline([r.g, r.t], {}, {strokeColor:'#ffb23e', strokeWidth:3, strokeStyle:'dash'})); all.push(r.g);
+    }
+  });
+  const mg = innerWidth > 700 ? [70, 70, 70, 380] : [70, 40, Math.round(innerHeight * .55), 40];
+  if (all.length > 1) resMap.setBounds(ymaps.util.bounds.fromPoints(all), {checkZoomRange:true, zoomMargin:mg});
+  else resMap.setCenter(all[0], 15);
+}
+
+function showResult(r){
+  $('result').classList.add('show'); $('rSide').style.display = ''; $('fSide').style.display = 'none';
+  $('rTitle').textContent = `Раунд ${round} завершён!`;
+  $('rPts').textContent = r.pts; $('rDist').textContent = fmtDist(r.d); $('rTime').textContent = fmtSec(r.ms); $('rTotal').textContent = total;
+  $('rBar').style.width = '0'; setTimeout(() => $('rBar').style.width = (r.pts / MAX_POINTS * 100) + '%', 60);
+  $('nextBtn').textContent = round >= ROUNDS ? 'Итоги игры' : `Раунд ${round + 1}`;
+  ensureResMap(); drawPairs([r]);
+}
+
+const GRADES = ['Перепутал Пермь с Парижем', 'Заблудился на Компросе', 'Турист без навигатора', 'Кама — это где-то рядом?', 'Пермяк на каникулах', 'Стажёр в такси', 'Знаешь, где автобус не ходит', 'Гроза маршруток', 'Живой навигатор', 'Медведь Перми: ты и есть город'];
+
+function finish(){
+  clearInterval(clockId);
+  if (player){ player.destroy(); player = null; }
+  const rec = store.get('pg_rec', {}), k = recKey(), isNew = total > (rec[k] || 0);
+  if (isNew){ rec[k] = total; store.set('pg_rec', rec); }
+  const pc = total / (ROUNDS * MAX_POINTS), gr = Math.max(1, Math.min(10, Math.round(pc * 10)));
+  $('result').classList.add('show'); $('rSide').style.display = 'none'; $('fSide').style.display = '';
+  $('fGrade').textContent = gr; $('fRank').textContent = GRADES[gr - 1] + (isNew ? ' · новый рекорд!' : '');
+  $('fTotal').textContent = total; $('fAcc').textContent = Math.round(pc * 100) + '%';
+  $('fTime').textContent = fmtClock(sumMs); $('fMode').textContent = MODES[cur.mode].n;
+  $('fRows').innerHTML = results.map((r, i) => `<div><span>#${i + 1} · ${fmtDist(r.d)} · ${fmtSec(r.ms)}</span><b>${r.pts}</b></div>`).join('');
+  ensureResMap(); drawPairs(results);
+}
+
+function quit(){
+  gid++; clearInterval(timerId); clearInterval(clockId); locked = true;
+  if (player){ player.destroy(); player = null; }
+  ['game', 'result'].forEach(i => $(i).classList.remove('show'));
+  $('lobby').classList.add('show'); renderLobby();
+}
+
+/* ===== Компас ===== */
+function drawCompass(){
+  const c = $('compass'), x = c.getContext('2d'), W = c.width, H = c.height;
+  x.clearRect(0, 0, W, H);
+  const yaw = player ? player.getDirection()[0] : 0, ppd = W / 140;
+  const names = {0:'N', 45:'45', 90:'E', 135:'135', 180:'S', 225:'225', 270:'W', 315:'315'};
+  x.textAlign = 'center'; x.font = 'bold 22px "Segoe UI",sans-serif';
+  for (let d = Math.floor((yaw - 70) / 5) * 5; d <= yaw + 70; d += 5){
+    const px = W / 2 + (d - yaw) * ppd, deg = ((d % 360) + 360) % 360, major = deg % 45 === 0;
+    x.fillStyle = 'rgba(255,255,255,.6)';
+    x.fillRect(px, H - (major ? 26 : 14), 2, major ? 20 : 10);
+    if (major){ x.fillStyle = deg === 0 ? '#ff5a4f' : '#fff'; x.fillText(names[deg], px, 30); }
+  }
+  x.fillStyle = '#ff5a4f'; x.fillRect(W / 2 - 2, 0, 4, H);
+}
+
+/* ===== Вращение и зум в режимах без перемещения ===== */
+(function(){
+  const sh = $('shield'); let drag = null;
+  sh.addEventListener('pointerdown', e => { if (MODES[cur.mode].rot){ drag = {x:e.clientX, y:e.clientY}; sh.setPointerCapture(e.pointerId); } });
+  sh.addEventListener('pointerup', () => drag = null);
+  sh.addEventListener('pointermove', e => {
+    if (!drag || !player) return;
+    const sp = player.getSpan(), dir = player.getDirection();
+    player.setDirection([(dir[0] - (e.clientX - drag.x) * sp[0] / sh.clientWidth + 360) % 360,
+      Math.max(-80, Math.min(80, dir[1] + (e.clientY - drag.y) * sp[1] / sh.clientHeight))]);
+    drag = {x:e.clientX, y:e.clientY};
+  });
+  sh.addEventListener('wheel', e => {
+    e.preventDefault(); if (!player || !MODES[cur.mode].rot) return;
+    const sp = player.getSpan(), w = Math.max(25, Math.min(110, sp[0] * (e.deltaY > 0 ? 1.12 : .89)));
+    player.setSpan([w, sp[1] * w / sp[0]]);
+  }, {passive:false});
+})();
+
+/* ===== Кнопки ===== */
+$('startBtn').onclick = () => ready && newGame();
+$('againBtn').onclick = newGame;
+$('menuBtn').onclick = quit;
+$('leave').onclick = quit;
+$('ans').onclick = submit;
+$('nextBtn').onclick = nextRound;
+$('miniTg').onclick = () => $('mini').classList.toggle('open');
+$('homeBtn').onclick = () => { if (player && startPano) player.setPanorama(startPano); };
+$('shareBtn').onclick = () => {
+  const t = `Угадай Пермь · ${MODES[cur.mode].n}: ${total} из ${ROUNDS * MAX_POINTS} за ${fmtClock(sumMs)}`;
+  (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => $('shareBtn').textContent = 'Скопировано', () => $('shareBtn').textContent = t);
+};
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && $('game').classList.contains('show') && !locked && guess){ e.preventDefault(); submit(); }
+  if (e.code === 'Enter' && $('lobby').classList.contains('show') && ready) newGame();
+});
+</script>
+</body>
+</html>
