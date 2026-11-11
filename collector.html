@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Сборщик точек — Угадай Пермь</title>
+<style>
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:#070b12;color:#eef3f7;font:15px/1.5 "Segoe UI",system-ui,sans-serif;padding:20px}
+.card{width:min(640px,100%);padding:28px;border-radius:20px;background:linear-gradient(135deg,rgba(255,255,255,.12),rgba(255,255,255,.04));border:1px solid rgba(255,255,255,.18)}
+h1{margin:0 0 6px;font-size:26px}p{color:rgba(238,243,247,.65);margin:0 0 16px}
+button{font:inherit;font-weight:700;border:0;border-radius:14px;padding:12px 20px;cursor:pointer;background:linear-gradient(180deg,#ffc467,#ff9f2e);color:#1b1304;margin:0 8px 8px 0}
+button.alt{background:rgba(255,255,255,.12);color:#eef3f7}
+button:disabled{opacity:.45;cursor:not-allowed}
+#stat{font-size:20px;font-weight:700;margin:6px 0 4px;color:#ffb23e}
+#log{margin-top:10px;max-height:240px;overflow:auto;font:13px/1.5 ui-monospace,Consolas,monospace;color:#9fd6dd;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Сборщик точек</h1>
+  <p>Берёт границу Перми из OpenStreetMap (один запрос) и сам ищет панорамы Яндекса по всем районам внутри неё. На выходе файл <b>points.json</b> с проверенными точками. Открывайте эту страницу только по адресу GitHub Pages, не с диска. Вкладку не закрывайте, можно нажать «Стоп» в любой момент: то, что уже найдено, скачается.</p>
+  <button id="go" disabled>Загрузка карт…</button><button id="stop" class="alt" disabled>Стоп</button><button id="dl" class="alt" disabled>Скачать points.json</button>
+  <div id="stat"></div>
+  <div id="log"></div>
+</div>
+<script>
+const API_KEY = 'f393bc0f-d2e5-41e7-89e2-1de38c141a01';
+const MAX_POINTS = 1000, CELL = [0.01, 0.02], TRIES = 6, WORKERS = 8;   // ячейка ≈ 1.1 × 1.2 км
+const $ = id => document.getElementById(id);
+const log = t => { $('log').textContent += t + '\n'; $('log').scrollTop = 1e9; };
+let pts = [], stop = false, calls = 0;
+
+const sc = document.createElement('script');
+sc.src = `https://api-maps.yandex.ru/2.1/?apikey=${API_KEY}&lang=ru_RU`;
+sc.onload = () => ymaps.ready(() => { $('go').disabled = false; $('go').textContent = 'Собрать точки'; });
+sc.onerror = () => { $('go').textContent = 'Яндекс API не загрузился'; };
+document.head.appendChild(sc);
+
+const dist = (a, b) => ymaps.coordSystem.geo.getDistance(a, b);
+const locate = c => ymaps.panorama.locate(c, {layer:'yandex#panorama'}).then(a => a[0] || null, () => null);
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+function inRing(x, y, ring){
+  let c = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++){
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+const inPoly = (lat, lon, polys) => polys.some(p => inRing(lon, lat, p[0]) && !p.slice(1).some(h => inRing(lon, lat, h)));
+
+async function getBoundary(){
+  const url = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({q:'Пермь', format:'jsonv2', polygon_geojson:'1', limit:'8', 'accept-language':'ru'});
+  const res = await (await fetch(url)).json();
+  const ok = res.filter(r => r.geojson && /Polygon/.test(r.geojson.type) && r.name === 'Пермь');
+  if (!ok.length) throw new Error('Nominatim не вернул границу Перми');
+  const area = r => (r.boundingbox[1] - r.boundingbox[0]) * (r.boundingbox[3] - r.boundingbox[2]);
+  const best = ok.sort((a, b) => area(b) - area(a))[0];
+  const g = best.geojson;
+  return {polys: g.type === 'Polygon' ? [g.coordinates] : g.coordinates, bb: best.boundingbox.map(Number), name: best.display_name};
+}
+
+async function run(){
+  $('go').disabled = true; $('stop').disabled = false; $('dl').disabled = false; stop = false; pts = []; calls = 0; $('log').textContent = '';
+  log('1/2 Загружаю границу города…');
+  const B = await getBoundary();
+  log(`  ${B.name}\n  рамка: ${B.bb[0]}–${B.bb[1]} с.ш., ${B.bb[2]}–${B.bb[3]} в.д.`);
+  const [s, n, w, e] = B.bb, cells = [];
+  for (let la = Math.floor(s / CELL[0]) * CELL[0]; la < n; la += CELL[0])
+    for (let lo = Math.floor(w / CELL[1]) * CELL[1]; lo < e; lo += CELL[1]){
+      const cx = la + CELL[0] / 2, cy = lo + CELL[1] / 2;
+      // оставляем ячейки, где центр или любой из углов внутри города
+      if ([[cx, cy], [la, lo], [la + CELL[0], lo], [la, lo + CELL[1]], [la + CELL[0], lo + CELL[1]]].some(c => inPoly(c[0], c[1], B.polys))) cells.push([la, lo]);
+    }
+  log(`2/2 Ячеек внутри города: ${cells.length}. Ищу панорамы (по 2 точки на ячейку)…`);
+  const queue = shuffle(cells.concat(cells)); let idx = 0;
+
+  async function doCell([la, lo]){
+    for (let t = 0; t < TRIES && !stop; t++){
+      const c = [la + Math.random() * CELL[0], lo + Math.random() * CELL[1]];
+      if (!inPoly(c[0], c[1], B.polys)) continue;
+      calls++;
+      const p = await locate(c); if (!p) continue;
+      const pos = p.getPosition().slice(0, 2);
+      if (dist(pos, c) > 45 || !inPoly(pos[0], pos[1], B.polys)) continue;
+      if (pts.some(q => dist(q, pos) < 250)) continue;
+      pts.push([+pos[0].toFixed(5), +pos[1].toFixed(5)]); return;
+    }
+  }
+  async function worker(){
+    while (!stop && idx < queue.length && pts.length < MAX_POINTS){
+      await doCell(queue[idx++]);
+      $('stat').textContent = `Найдено точек: ${pts.length} · обработано ячеек: ${idx}/${queue.length} · запросов к Яндексу: ${calls}`;
+    }
+  }
+  await Promise.all(Array.from({length:WORKERS}, worker));
+  log(stop ? `Остановлено. Найдено ${pts.length} точек.` : `Готово: ${pts.length} точек. Нажмите «Скачать points.json».`);
+}
+$('go').onclick = () => run().catch(e => log('Ошибка: ' + e.message)).finally(() => { $('go').disabled = false; $('stop').disabled = true; });
+$('stop').onclick = () => { stop = true; };
+$('dl').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(pts)], {type:'application/json'}));
+  a.download = 'points.json'; a.click();
+};
+</script>
+</body>
+</html>
